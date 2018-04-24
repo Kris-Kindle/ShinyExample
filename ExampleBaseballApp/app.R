@@ -8,6 +8,11 @@ library(lubridate)
 
 years <- Teams$yearID
 
+names <- Master %>%
+  select(playerID, nameFirst, nameLast)
+
+batting <- Batting
+
 teams <- Teams %>%
   group_by(teamID, lgID, name) %>%
   filter(lgID %in% c("AL", "NL")) %>%
@@ -17,9 +22,10 @@ teams <- Teams %>%
 
 # Define UI for application that draws a histogram
 ui <- dashboardPage(
-  dashboardHeader(),
+  dashboardHeader(title="Lahman Batting Data"),
   dashboardSidebar(),
   dashboardBody(
+    fluidRow(
     box("Filters",
         width =4,
         numericInput("Year",
@@ -35,9 +41,16 @@ ui <- dashboardPage(
         uiOutput("teamSelection")
     
     ),
-    box("Player Info",
+    box("Par Plot",
       width=8,
-      dataTableOutput("players")
+      plotlyOutput("linePlot")
+      )
+    ),
+    fluidRow(
+      box("Player Info",
+          width=12,
+          dataTableOutput("players")
+      )
     )
   )
 )
@@ -47,16 +60,46 @@ server <- function(input, output,session) {
   
   playerData <- reactive({
     req(input$Teams)
-    batting <- Batting %>%
+    battingPlayer <- batting %>%
       left_join(names, by = "playerID") %>%
-      filter(teamID == input$Teams & yearID == input$Year) %>%
-      arrange(playerID, yearID)
+      filter(yearID == input$Year & teamID == input$Teams) %>%
+      select(nameFirst, nameLast,G,AB,R,H,X2B,X3B,HR,RBI,SB,CS,BB,SO,IBB,HBP,SH,SF,GIDP)
     
   })
   
+  plotData <- reactive({
+    req(input$Teams)
+    battingPlot <- batting %>%
+      filter(yearID == input$Year & teamID == input$Teams)
+  })
+  
+  output$linePlot <- renderPlotly({
+    p <- plotData() %>%
+      plot_ly() %>%
+      add_trace(
+        type = 'parcoords',
+        line = list(
+          color = ~G,
+          showscal = TRUE
+        ),
+        dimensions = list(
+          list(range = c(~min(G), ~max(G)),
+               label = 'Games Played', values = ~G),
+          list(range = c(~min(AB), ~max(AB)),
+               label = 'At-Bats', values = ~AB),
+          list(range = c(~min(H), ~max(H)),
+               label = 'Hits', values = ~H),
+          list(range = c(~min(RBI), ~max(RBI)),
+               label = 'RBI', values = ~RBI),
+          list(range = c(~min(HR), ~max(HR)),
+               label = 'HR', values = ~HR)
+        )
+      )
+    return(p)
+  })
+  
   output$players <- renderDataTable({
-    playerTable <- playerData() %>%
-      datatable()
+    playerData() 
   }) 
   
   output$teamSelection <- renderUI({
